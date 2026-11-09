@@ -1,0 +1,2 @@
+2:I[123,["searchResult",{"items":[{"id":"1","title":"Monitor Dell","slug":"monitor-dell-1","listingId":"9","listing":{"title":"Leilao","kwaraId":"K-3161"},"cachedPriceAmountCents":123,"isEnded":false,"lotAuctionSettings":[{"isCurrent":true,"startingBidCents":100}]}],"totalItems":1}]]
+"searchResult":{"items":[{"id":"1","title":"Monitor Dell","slug":"monitor-dell-1","listingId":"9","listing":{"title":"Leilao","kwaraId":"K-3161"},"cachedPriceAmountCents":123,"isEnded":false,"lotAuctionSettings":[{"isCurrent":true,"startingBidCents":100}]}],"totalItems":1}

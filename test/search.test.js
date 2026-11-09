@@ -1,7 +1,21 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 
-import { classifyQuery, jsonSearchBody } from "../src/search.js";
+import {
+  classifyQuery,
+  jsonSearchBody,
+  parseSearchPayload,
+  parseRscSearch,
+  RSC_PARSE_ERROR,
+} from "../src/search.js";
+
+const fixture = readFileSync(
+  join(dirname(fileURLToPath(import.meta.url)), "fixtures/search-rsc.txt"),
+  "utf8",
+);
 
 test("classifyQuery maps lot URL, event URL, K-code, digits, and text", () => {
   assert.deepEqual(
@@ -51,4 +65,23 @@ test("jsonSearchBody fills listingSlugs or listingIds and keeps empty arrays", (
   const byId = jsonSearchBody({ kind: "listingId", listingId: "12" });
   assert.deepEqual(byId.listingIds, ["12"]);
   assert.deepEqual(byId.listingSlugs, []);
+});
+
+test("parseSearchPayload reads items and total", () => {
+  const parsed = parseSearchPayload({
+    items: [{ id: "1", title: "A", slug: "a-1" }],
+    totalItems: 4,
+  });
+  assert.equal(parsed.total, 4);
+  assert.equal(parsed.items[0].id, "1");
+});
+
+test("parseRscSearch extracts searchResult items", () => {
+  const parsed = parseRscSearch(fixture);
+  assert.equal(parsed.items[0].title, "Monitor Dell");
+  assert.equal(parsed.total, 1);
+});
+
+test("parseRscSearch throws the pt-BR error on garbage", () => {
+  assert.throws(() => parseRscSearch("not-rsc"), (error) => error.message === RSC_PARSE_ERROR);
 });

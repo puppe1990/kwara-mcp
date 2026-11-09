@@ -1,3 +1,5 @@
+import { compactLot } from "./lots.js";
+
 const K_CODE = /K-\d+/i;
 
 function pathFromQuery(q) {
@@ -73,4 +75,65 @@ export function jsonSearchBody(classification) {
     body.listingIds = [classification.listingId];
   }
   return body;
+}
+
+export const RSC_PARSE_ERROR = "não deu para ler a busca do site";
+
+function itemsFrom(payload) {
+  if (Array.isArray(payload)) return payload;
+  if (!payload || typeof payload !== "object") return [];
+  if (Array.isArray(payload.items)) return payload.items;
+  if (Array.isArray(payload.data?.items)) return payload.data.items;
+  return [];
+}
+
+function totalFrom(payload) {
+  if (!payload || typeof payload !== "object") return null;
+  const total = payload.totalItems ?? payload.total ?? payload.data?.totalItems ?? payload.data?.total;
+  return total == null ? null : Number(total);
+}
+
+export function parseSearchPayload(payload) {
+  return {
+    items: itemsFrom(payload).map(compactLot).filter((lot) => lot.id),
+    total: totalFrom(payload),
+  };
+}
+
+function balancedObject(source, start) {
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+  for (let index = start; index < source.length; index += 1) {
+    const char = source[index];
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (char === "\\") escaped = true;
+      else if (char === "\"") inString = false;
+      continue;
+    }
+    if (char === "\"") inString = true;
+    else if (char === "{") depth += 1;
+    else if (char === "}") {
+      depth -= 1;
+      if (depth === 0) return source.slice(start, index + 1);
+    }
+  }
+  return null;
+}
+
+export function parseRscSearch(body) {
+  if (typeof body !== "string") throw new Error(RSC_PARSE_ERROR);
+  const key = '"searchResult":';
+  const keyIdx = body.indexOf(key);
+  if (keyIdx === -1) throw new Error(RSC_PARSE_ERROR);
+  const objectStart = body.indexOf("{", keyIdx + key.length);
+  if (objectStart === -1) throw new Error(RSC_PARSE_ERROR);
+  const json = balancedObject(body, objectStart);
+  if (!json) throw new Error(RSC_PARSE_ERROR);
+  try {
+    return parseSearchPayload(JSON.parse(json));
+  } catch {
+    throw new Error(RSC_PARSE_ERROR);
+  }
 }
