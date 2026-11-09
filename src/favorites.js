@@ -1,6 +1,6 @@
 import { API_ORIGIN, compactLot } from "./lots.js";
 import { KwaraHttpError, kwaraFetch } from "./client.js";
-import { createAuthSession } from "./auth.js";
+import { createAuthSession, REJECTED_REFRESH_PREFIX } from "./auth.js";
 
 function clampTake(take) {
   const value = Number(take ?? 20);
@@ -55,7 +55,15 @@ export async function listFavorites({
     return await getPage(false);
   } catch (error) {
     if (error instanceof KwaraHttpError && error.status === 401) {
-      return getPage(true);
+      try {
+        return await getPage(true);
+      } catch (retryError) {
+        if (retryError instanceof Error && retryError.message.startsWith(REJECTED_REFRESH_PREFIX)) {
+          throw retryError;
+        }
+        const status = retryError instanceof KwaraHttpError ? retryError.status : 401;
+        throw new Error(`${REJECTED_REFRESH_PREFIX} (HTTP ${status})`);
+      }
     }
     throw error;
   }

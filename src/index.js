@@ -5,6 +5,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { pathToFileURL } from "node:url";
 import { z } from "zod";
 
+import { createAuthSession } from "./auth.js";
 import { searchLots, fetchLotDetails, classifyQuery } from "./search.js";
 import { listFavorites } from "./favorites.js";
 
@@ -13,6 +14,7 @@ const skipSchema = z.number().int().min(0).optional().describe("offset, padrão 
 
 export function buildTools(deps = {}) {
   const { fetchImpl, configPath, env } = deps;
+  const session = createAuthSession({ fetchImpl, configPath, env });
   return [
     {
       name: "kwara_search",
@@ -47,7 +49,7 @@ export function buildTools(deps = {}) {
         onlyActiveItems: z.boolean().optional().describe("só itens ativos, padrão true"),
       },
       run: async ({ take, skip, onlyActiveItems }) =>
-        listFavorites({ take, skip, onlyActiveItems, fetchImpl, configPath, env }),
+        listFavorites({ take, skip, onlyActiveItems, fetchImpl, configPath, env, session }),
     },
   ];
 }

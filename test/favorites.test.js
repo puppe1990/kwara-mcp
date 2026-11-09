@@ -5,9 +5,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { listFavorites } from "../src/favorites.js";
-import { KwaraHttpError } from "../src/client.js";
 import { fakeJwt, fakeLot } from "./factories.js";
-import { persistRotatedRefresh } from "../src/auth.js";
+import { persistRotatedRefresh, REJECTED_REFRESH_PREFIX } from "../src/auth.js";
 
 test("listFavorites uses JWT id not buyerId", async () => {
   const access = fakeJwt({ id: "111", buyerId: "999", type: "access" });
@@ -96,4 +95,42 @@ test("listFavorites refreshes once on 401 then retries", async () => {
   assert.equal(result.items[0].id, "22");
   assert.equal(refreshCalls, 2);
   assert.equal(favoritesCalls, 2);
+});
+
+test("listFavorites maps a second 401 to rejected refresh without body or path", async () => {
+  const access = fakeJwt({ id: "111", buyerId: "999", type: "access" });
+  const refresh = fakeJwt({ id: "111", buyerId: "999", type: "refresh" });
+  const dir = await mkdtemp(join(tmpdir(), "kwara-mcp-"));
+  const configPath = join(dir, "config.json");
+  const fetchImpl = async (url) => {
+    if (String(url).includes("/auth/refresh-token")) {
+      return {
+        ok: true,
+        status: 200,
+        headers: { get: () => "application/json" },
+        json: async () => ({
+          accessToken: access,
+          refreshToken: refresh,
+          accessTokenExpiresAt: new Date(Date.now() + 60_000).toISOString(),
+          refreshTokenExpiresAt: "2027-01-01T00:00:00.000Z",
+        }),
+      };
+    }
+    return {
+      ok: false,
+      status: 401,
+      headers: { get: () => "application/json" },
+      json: async () => ({ error: "expired-secret" }),
+    };
+  };
+  await assert.rejects(
+    () => listFavorites({ fetchImpl, configPath, env: { KWARA_REFRESH_TOKEN: refresh } }),
+    (error) => {
+      assert.match(error.message, new RegExp(REJECTED_REFRESH_PREFIX));
+      assert.match(error.message, /HTTP 401/);
+      assert.doesNotMatch(error.message, /expired-secret/);
+      assert.doesNotMatch(error.message, /web\/users/);
+      return true;
+    },
+  );
 });
