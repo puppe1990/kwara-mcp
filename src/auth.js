@@ -98,3 +98,25 @@ export async function refreshAccess({
   }
   throw rejectedRefresh(lastStatus || 401);
 }
+
+export function createAuthSession({ fetchImpl = fetch, configPath, env = process.env, now = Date.now } = {}) {
+  let accessToken = null;
+  let accessExpiresAtMs = 0;
+  let userId = null;
+  let method = null;
+  const path = configPath || env.KWARA_CONFIG_PATH || defaultConfigPath();
+
+  async function getAccess({ force = false } = {}) {
+    const freshEnough = accessToken && now() < accessExpiresAtMs - 60_000;
+    if (!force && freshEnough) return { accessToken, userId, method };
+    const refreshToken = await loadRefreshToken({ configPath: path, env });
+    const session = await refreshAccess({ refreshToken, fetchImpl, configPath: path, method });
+    accessToken = session.accessToken;
+    accessExpiresAtMs = session.accessExpiresAtMs;
+    userId = session.userId;
+    method = session.method;
+    return { accessToken, userId, method };
+  }
+
+  return { getAccess };
+}
