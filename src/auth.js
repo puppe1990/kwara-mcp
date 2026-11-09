@@ -1,6 +1,8 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { homedir } from "node:os";
+import { API_ORIGIN } from "./lots.js";
+import { KwaraHttpError, kwaraFetch } from "./client.js";
 
 export const MISSING_REFRESH_MESSAGE =
   "configure KWARA_REFRESH_TOKEN ou ~/.config/kwara/config.json";
@@ -43,4 +45,56 @@ export async function loadRefreshToken({ configPath, env = process.env } = {}) {
   const fromEnv = env.KWARA_REFRESH_TOKEN;
   if (fromEnv) return String(fromEnv);
   throw new Error(MISSING_REFRESH_MESSAGE);
+}
+
+export const REJECTED_REFRESH_PREFIX = "refresh rejeitado, cole um token novo";
+
+function rejectedRefresh(status) {
+  return new Error(`${REJECTED_REFRESH_PREFIX} (HTTP ${status})`);
+}
+
+export async function refreshAccess({
+  refreshToken,
+  fetchImpl = fetch,
+  configPath,
+  method = null,
+} = {}) {
+  const url = `${API_ORIGIN}/auth/refresh-token`;
+  const attempts =
+    method === "cookie"
+      ? [{ name: "cookie", headers: { Cookie: `__Secure-auth.kat=${refreshToken}` } }]
+      : method === "bearer"
+        ? [{ name: "bearer", headers: { Authorization: `Bearer ${refreshToken}` } }]
+        : [
+            { name: "bearer", headers: { Authorization: `Bearer ${refreshToken}` } },
+            { name: "cookie", headers: { Cookie: `__Secure-auth.kat=${refreshToken}` } },
+          ];
+
+  let lastStatus = 0;
+  for (const attempt of attempts) {
+    try {
+      const body = await kwaraFetch(url, { headers: attempt.headers, fetchImpl });
+      const accessToken = body.accessToken;
+      if (!accessToken) throw rejectedRefresh(200);
+      if (body.refreshToken && configPath) {
+        await persistRotatedRefresh(configPath, body.refreshToken, body.refreshTokenExpiresAt);
+      }
+      const expiresAt = body.accessTokenExpiresAt
+        ? Date.parse(body.accessTokenExpiresAt)
+        : (decodeJwtPayload(accessToken)?.exp ?? 0) * 1000;
+      return {
+        accessToken,
+        userId: userIdFromAccess(accessToken),
+        accessExpiresAtMs: expiresAt,
+        method: attempt.name,
+      };
+    } catch (error) {
+      if (error instanceof KwaraHttpError) {
+        lastStatus = error.status;
+        continue;
+      }
+      throw error;
+    }
+  }
+  throw rejectedRefresh(lastStatus || 401);
 }
