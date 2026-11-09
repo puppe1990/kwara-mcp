@@ -4,12 +4,15 @@ import { dirname, join } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
+import { API_ORIGIN, SITE_ORIGIN } from "../src/lots.js";
 import {
   classifyQuery,
   jsonSearchBody,
   parseSearchPayload,
   parseRscSearch,
   RSC_PARSE_ERROR,
+  searchLots,
+  BUSCA_ROUTER_STATE_TREE,
 } from "../src/search.js";
 
 const fixture = readFileSync(
@@ -84,4 +87,67 @@ test("parseRscSearch extracts searchResult items", () => {
 
 test("parseRscSearch throws the pt-BR error on garbage", () => {
   assert.throws(() => parseRscSearch("not-rsc"), (error) => error.message === RSC_PARSE_ERROR);
+});
+
+test("searchLots posts JSON for K-codes", async () => {
+  const calls = [];
+  const fetchImpl = async (url, init) => {
+    calls.push({ url, init });
+    return {
+      ok: true,
+      status: 200,
+      headers: { get: () => "application/json" },
+      json: async () => ({
+        items: [{ id: "1", title: "A", slug: "a-1", listing: { kwaraId: "K-3161" } }],
+        totalItems: 1,
+      }),
+    };
+  };
+  const result = await searchLots({ q: "K-3161", take: 20, skip: 0, fetchImpl });
+  assert.equal(result.source, "json");
+  assert.equal(result.items[0].id, "1");
+  assert.match(calls[0].url, new RegExp(`${API_ORIGIN}/web/lots/search\\?take=20&skip=0`));
+  assert.equal(calls[0].init.method, "POST");
+  const body = JSON.parse(calls[0].init.body);
+  assert.deepEqual(body.listingSlugs, ["K-3161"]);
+  assert.equal(Object.hasOwn(body, "q"), false);
+});
+
+test("searchLots fetches lot details for /bens URLs", async () => {
+  const fetchImpl = async (url) => {
+    assert.match(url, /\/web\/lots\/99\/details\?includeBids=true&isBot=false/);
+    return {
+      ok: true,
+      status: 200,
+      headers: { get: () => "application/json" },
+      json: async () => ({ id: "99", title: "B", slug: "b-99" }),
+    };
+  };
+  const result = await searchLots({ q: "/bens/b-99", fetchImpl });
+  assert.equal(result.source, "details");
+  assert.equal(result.items[0].id, "99");
+});
+
+test("searchLots uses RSC for free text", async () => {
+  const calls = [];
+  const fetchImpl = async (url, init) => {
+    calls.push({ url, init });
+    return {
+      ok: true,
+      status: 200,
+      headers: { get: () => "text/x-component" },
+      text: async () =>
+        `"searchResult":{"items":[{"id":"3","title":"C","slug":"c-3"}],"totalItems":1}`,
+      json: async () => ({}),
+    };
+  };
+  const result = await searchLots({ q: "monitor dell", take: 20, skip: 20, fetchImpl });
+  assert.equal(result.source, "rsc");
+  assert.equal(result.items[0].id, "3");
+  assert.ok(calls[0].url.startsWith(`${SITE_ORIGIN}/busca?q=monitor%20dell`));
+  assert.match(calls[0].url, /currentPage=2/);
+  assert.equal(calls[0].init.headers.rsc, "1");
+  assert.equal(calls[0].init.headers["next-url"], "/busca");
+  assert.equal(calls[0].init.headers["next-router-state-tree"], BUSCA_ROUTER_STATE_TREE);
+  assert.equal(calls[0].init.headers["x-deployment-id"], undefined);
 });

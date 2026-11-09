@@ -1,4 +1,5 @@
-import { compactLot } from "./lots.js";
+import { API_ORIGIN, SITE_ORIGIN, compactLot, compactLotDetails } from "./lots.js";
+import { kwaraFetch } from "./client.js";
 
 const K_CODE = /K-\d+/i;
 
@@ -136,4 +137,57 @@ export function parseRscSearch(body) {
   } catch {
     throw new Error(RSC_PARSE_ERROR);
   }
+}
+
+export const BUSCA_ROUTER_STATE_TREE =
+  '%5B%22%22%2C%7B%22children%22%3A%5B%22busca%22%2C%7B%22children%22%3A%5B%22__PAGE__%22%2C%7B%7D%2Cnull%2C%22refetch%22%2C0%5D%7D%2Cnull%2Cnull%2C0%5D%7D%2Cnull%2Cnull%2C16%5D';
+
+function clampTake(take) {
+  const value = Number(take ?? 20);
+  if (!Number.isFinite(value) || value <= 0) return 20;
+  return Math.min(50, Math.trunc(value));
+}
+
+export async function fetchLotDetails(id, { fetchImpl } = {}) {
+  const pathId = encodeURIComponent(String(id));
+  const url = `${API_ORIGIN}/web/lots/${pathId}/details?includeBids=true&isBot=false`;
+  const payload = await kwaraFetch(url, { fetchImpl });
+  return compactLotDetails(payload);
+}
+
+export async function searchLots({ q, take = 20, skip = 0, fetchImpl } = {}) {
+  const classification = classifyQuery(q);
+  const limit = clampTake(take);
+  const offset = Math.max(0, Number(skip) || 0);
+
+  if (classification.kind === "lot") {
+    const lot = await fetchLotDetails(classification.id, { fetchImpl });
+    return { items: [lot], total: 1, source: "details" };
+  }
+
+  if (classification.kind === "text") {
+    const page = Math.floor(offset / limit) + 1;
+    let url = `${SITE_ORIGIN}/busca?q=${encodeURIComponent(classification.q)}`;
+    if (offset > 0) url += `&currentPage=${page}`;
+    const body = await kwaraFetch(url, {
+      fetchImpl,
+      headers: {
+        Accept: "*/*",
+        rsc: "1",
+        "next-url": "/busca",
+        "next-router-state-tree": BUSCA_ROUTER_STATE_TREE,
+      },
+    });
+    const parsed = parseRscSearch(typeof body === "string" ? body : JSON.stringify(body));
+    return { ...parsed, source: "rsc" };
+  }
+
+  const url = `${API_ORIGIN}/web/lots/search?take=${limit}&skip=${offset}`;
+  const payload = await kwaraFetch(url, {
+    method: "POST",
+    fetchImpl,
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(jsonSearchBody(classification)),
+  });
+  return { ...parseSearchPayload(payload), source: "json" };
 }
