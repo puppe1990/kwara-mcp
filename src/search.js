@@ -12,20 +12,29 @@ function pathFromQuery(q) {
   return { trimmed, path: trimmed };
 }
 
+function decodeSegment(segment) {
+  try {
+    return decodeURIComponent(segment);
+  } catch (err) {
+    if (err instanceof URIError) return segment;
+    throw err;
+  }
+}
+
 export function classifyQuery(q) {
   const { trimmed, path } = pathFromQuery(q);
   if (!trimmed) return { kind: "text", q: trimmed };
 
-  const bens = path.match(/\/bens\/([^/?#]+)/);
+  const bens = path.match(/^\/bens\/([^/?#\s]+)/);
   if (bens) {
-    const slug = decodeURIComponent(bens[1]);
+    const slug = decodeSegment(bens[1]);
     const idMatch = slug.match(/(\d+)$/);
     return { kind: "lot", id: idMatch ? idMatch[1] : slug, slug };
   }
 
-  const evento = path.match(/\/evento\/([^/?#]+)/);
+  const evento = path.match(/^\/evento\/([^/?#\s]+)/);
   if (evento) {
-    const slug = decodeURIComponent(evento[1]);
+    const slug = decodeSegment(evento[1]);
     const code = slug.match(K_CODE);
     return { kind: "listingSlug", listingSlug: code ? code[0] : slug };
   }

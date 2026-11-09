@@ -25,6 +25,23 @@ test("classifyQuery maps lot URL, event URL, K-code, digits, and text", () => {
   assert.deepEqual(classifyQuery("monitor dell"), { kind: "text", q: "monitor dell" });
 });
 
+test("classifyQuery treats mid-path /bens/ as text and keeps bad percent-encoding", () => {
+  assert.deepEqual(classifyQuery("look at /bens/foo-99 please"), {
+    kind: "text",
+    q: "look at /bens/foo-99 please",
+  });
+  assert.deepEqual(classifyQuery("https://www.kwara.com.br/foo/bens/bar-1"), {
+    kind: "text",
+    q: "https://www.kwara.com.br/foo/bens/bar-1",
+  });
+  assert.deepEqual(classifyQuery("/bens/foo-%"), { kind: "lot", id: "foo-%", slug: "foo-%" });
+  assert.deepEqual(classifyQuery("/bens/%E0%A4%A"), {
+    kind: "lot",
+    id: "%E0%A4%A",
+    slug: "%E0%A4%A",
+  });
+});
+
 test("jsonSearchBody fills listingSlugs or listingIds and keeps empty arrays", () => {
   const bySlug = jsonSearchBody({ kind: "listingSlug", listingSlug: "K-3161" });
   assert.deepEqual(bySlug.listingSlugs, ["K-3161"]);
