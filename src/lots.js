@@ -73,3 +73,34 @@ export function compactLot(raw) {
     url: lotUrl(slug, id),
   };
 }
+
+function stripHtml(text) {
+  return String(text)
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+export function compactLotDetails(raw) {
+  const item = normalizeLotPayload(raw);
+  const setting = currentAuctionSetting(item);
+  const base = compactLot(item);
+  let description = item.description == null ? null : stripHtml(item.description);
+  if (description && description.length > 2000) description = description.slice(0, 2000);
+  const images = Array.isArray(item.images)
+    ? item.images
+        .map((image) => (typeof image === "string" ? image : image?.url))
+        .filter(Boolean)
+        .slice(0, 3)
+    : [];
+  return {
+    ...base,
+    description,
+    pickupAddress: item.pickUpAddress ?? null,
+    incrementCents: setting.minimumIncrementCents ?? null,
+    increment: formatReais(setting.minimumIncrementCents),
+    images,
+    phase: setting.listingPhase?.phaseName ?? null,
+    views: item.views ?? null,
+  };
+}

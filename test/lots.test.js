@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { compactLot, formatReais, lotUrl } from "../src/lots.js";
+import { compactLot, compactLotDetails, formatReais, lotUrl } from "../src/lots.js";
 import { fakeLot } from "./factories.js";
 
 test("formatReais turns cents into R$ with comma", () => {
@@ -57,4 +57,24 @@ test("compactLot unwraps nested item and lot", () => {
   assert.equal(lot.id, "9");
   assert.equal(lot.title, "Inner");
   assert.equal(lot.currentBidCents, 50);
+});
+
+test("compactLotDetails adds description, images cap, increment, no bids", () => {
+  const details = compactLotDetails(
+    fakeLot({
+      id: "1",
+      slug: "a-1",
+      description: "<p>Oi</p> " + "x".repeat(2500),
+    }),
+  );
+  assert.equal(details.incrementCents, 10);
+  assert.equal(details.increment, "R$ 0,10");
+  assert.equal(details.phase, "Aberto");
+  assert.equal(details.views, 9);
+  assert.equal(details.pickupAddress, "Rua A, 1");
+  assert.equal(details.images.length, 3);
+  assert.equal(details.description.includes("<p>"), false);
+  assert.ok(details.description.length <= 2000);
+  assert.equal(details.bids, undefined);
+  assert.equal(details.feeTable, undefined);
 });
