@@ -4,6 +4,7 @@ import { dirname, join } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
+import { KwaraHttpError } from "../src/client.js";
 import { API_ORIGIN, SITE_ORIGIN } from "../src/lots.js";
 import {
   classifyQuery,
@@ -12,6 +13,8 @@ import {
   parseRscSearch,
   RSC_PARSE_ERROR,
   searchLots,
+  fetchLotDetails,
+  lotNotFoundMessage,
   BUSCA_ROUTER_STATE_TREE,
 } from "../src/search.js";
 
@@ -150,4 +153,14 @@ test("searchLots uses RSC for free text", async () => {
   assert.equal(calls[0].init.headers["next-url"], "/busca");
   assert.equal(calls[0].init.headers["next-router-state-tree"], BUSCA_ROUTER_STATE_TREE);
   assert.equal(calls[0].init.headers["x-deployment-id"], undefined);
+});
+
+test("fetchLotDetails maps 404 to lote não encontrado", async () => {
+  const fetchImpl = async () => {
+    throw new KwaraHttpError(404, "/web/lots/8/details");
+  };
+  await assert.rejects(
+    () => fetchLotDetails("8", { fetchImpl }),
+    (error) => error.message === lotNotFoundMessage("8"),
+  );
 });

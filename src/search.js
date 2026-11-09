@@ -1,5 +1,5 @@
+import { KwaraHttpError, kwaraFetch } from "./client.js";
 import { API_ORIGIN, SITE_ORIGIN, compactLot, compactLotDetails } from "./lots.js";
-import { kwaraFetch } from "./client.js";
 
 const K_CODE = /K-\d+/i;
 
@@ -148,11 +148,22 @@ function clampTake(take) {
   return Math.min(50, Math.trunc(value));
 }
 
+export function lotNotFoundMessage(id) {
+  return `lote ${id} não encontrado`;
+}
+
 export async function fetchLotDetails(id, { fetchImpl } = {}) {
   const pathId = encodeURIComponent(String(id));
   const url = `${API_ORIGIN}/web/lots/${pathId}/details?includeBids=true&isBot=false`;
-  const payload = await kwaraFetch(url, { fetchImpl });
-  return compactLotDetails(payload);
+  try {
+    const payload = await kwaraFetch(url, { fetchImpl });
+    return compactLotDetails(payload);
+  } catch (error) {
+    if (error instanceof KwaraHttpError && error.status === 404) {
+      throw new Error(lotNotFoundMessage(id));
+    }
+    throw error;
+  }
 }
 
 export async function searchLots({ q, take = 20, skip = 0, fetchImpl } = {}) {
