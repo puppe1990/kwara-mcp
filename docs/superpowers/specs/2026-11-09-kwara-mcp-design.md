@@ -47,7 +47,7 @@ Search and lot details call the JSON API with no `Authorization`. Favorites send
 
 ## 2. Tools
 
-Three tools, prefix `kwara_`. Each result is a JSON object serialized as MCP text (pretty-printed). No fee tables.
+Three tools, prefix `kwara_`. Each result is a JSON object serialized as MCP text (pretty-printed). No raw fee tables. `kwara_lot` returns computed all-in for the current bid and the next increment.
 
 | Tool | Auth | Args |
 | --- | --- | --- |
@@ -151,9 +151,9 @@ Identifiers in English. Money: integer cents plus formatted `R$` string (`123` �
 | `ended` | `isEnded === true` |
 | `url` | `https://www.kwara.com.br/bens/{slug}` when `slug` already ends with the lot `id`; otherwise `https://www.kwara.com.br/bens/{slug}-{id}` |
 
-No image on the list row. Drop fee tables, bid arrays, and seller blobs.
+No image on the list row. Drop fee tables, bid arrays, seller blobs, and all-in fields.
 
-Normalize nested `item` / `lot` the way `normalize_item_payload` does in the bot.
+Normalize nested `item` / `lot` / `lotDetails` the way `normalize_item_payload` does in the bot, plus the details envelope (`GET` returns `{ lotDetails: { … } }`).
 
 ### Details (`CompactLotDetails`) — `kwara_lot`
 
@@ -168,8 +168,14 @@ All list fields, plus:
 | `images` | up to 3 `images[].url` |
 | `phase` | `currentLotAuctionSetting.listingPhase.phaseName` |
 | `views` | `views` |
+| `comissaoPct` | `listing.buyerComissionPercent` (API typo Comission), else `buyerFeePercentage`; missing → 0 |
+| `despesasCents` / `despesas` | `feeStructureValues` row where `fromValueCents ≤ bid ≤ toValueCents`; missing table → 0 |
+| `comissaoCents` / `comissao` | `round(bid × comissaoPct)` |
+| `allInCents` / `allIn` | current bid + despesas + comissão |
+| `nextBidCents` / `nextBid` | current bid + `incrementCents`; null if increment missing |
+| `nextDespesas*` / `nextComissao*` / `nextAllIn*` | same formula on the next bid (bracket can jump) |
 
-`GET /web/lots/{id}/details?includeBids=true&isBot=false`. Individual bids are dropped.
+`GET /web/lots/{id}/details?includeBids=true&isBot=false`. Drop `feeTable`, `feeStructureValues`, and individual bids. Search/favorites stay on `compactLot` (no all-in).
 
 Current auction setting: `currentLotAuctionSetting` if it is an object, else the `lotAuctionSettings` entry with `isCurrent`, else `[0]`.
 
@@ -252,7 +258,7 @@ Command: `npm test` (`node --test`).
 Coverage:
 
 - `q` classification (K-code, digits, `/evento/` URL, `/bens/` URL, free text).
-- Compact list + details (fee tables absent; description cap; max 3 images).
+- Compact list + details (raw fee tables absent; computed all-in on details only; description cap; max 3 images).
 - `userId` reads `id`, ignores `buyerId`.
 - Refresh probe order with mock fetch (Bearer 401 then cookie 200, and Bearer 200 first).
 - Persist rotated refresh to a temp dir, file mode `0600`.

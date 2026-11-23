@@ -164,3 +164,28 @@ test("fetchLotDetails maps 404 to lote não encontrado", async () => {
     (error) => error.message === lotNotFoundMessage("8"),
   );
 });
+
+test("fetchLotDetails unwraps lotDetails and returns next all-in", async () => {
+  const fetchImpl = async () => ({
+    ok: true,
+    headers: { get: () => "application/json" },
+    json: async () => ({
+      lotDetails: {
+        id: "1754396646688425320",
+        title: "iPhone 11 128GB",
+        slug: "iphone-11-1754396646688425320",
+        cachedPriceAmountCents: 39700,
+        listing: { title: "Galpão", kwaraId: "K-3089", buyerComissionPercent: 0.05 },
+        feeStructureValues: [
+          { fromValueCents: 30000, toValueCents: 39999, feeCents: 11000 },
+          { fromValueCents: 40000, toValueCents: 49999, feeCents: 14100 },
+        ],
+        currentLotAuctionSetting: { minimumIncrementCents: 2000, listingPhase: { phaseName: "1º Leilão" } },
+      },
+    }),
+  });
+  const lot = await fetchLotDetails("1754396646688425320", { fetchImpl });
+  assert.equal(lot.title, "iPhone 11 128GB");
+  assert.equal(lot.allIn, "R$ 526,85");
+  assert.equal(lot.nextAllIn, "R$ 578,85");
+});

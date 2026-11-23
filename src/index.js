@@ -29,7 +29,8 @@ export function buildTools(deps = {}) {
     },
     {
       name: "kwara_lot",
-      description: "Ficha de um lote. id é o id numérico do lote ou a URL /bens/{slug}.",
+      description:
+        "Ficha de um lote. id é o id numérico do lote ou a URL /bens/{slug}. Traz all-in (lance + despesas + comissão) do lance atual e do próximo.",
       schema: {
         id: z.string().describe("id do lote ou URL /bens/"),
       },
