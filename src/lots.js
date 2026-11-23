@@ -31,15 +31,50 @@ export function normalizeLotPayload(item) {
   if (!item || typeof item !== "object") return {};
   const nestedItem = item.item && typeof item.item === "object" ? item.item : {};
   const nestedLot = item.lot && typeof item.lot === "object" ? item.lot : {};
-  const merged = { ...item, ...nestedItem, ...nestedLot };
-  merged.id ??= item.lotId || item.listingId || item.id;
-  merged.slug ??= nestedLot.slug || nestedItem.slug;
-  merged.cachedPriceAmountCents ??= nestedLot.cachedPriceAmountCents;
+  const nestedDetails = item.lotDetails && typeof item.lotDetails === "object" ? item.lotDetails : {};
+  const merged = { ...item, ...nestedItem, ...nestedLot, ...nestedDetails };
+  merged.id ??= item.lotId || item.listingId || item.id || nestedDetails.id;
+  merged.slug ??= nestedLot.slug || nestedItem.slug || nestedDetails.slug;
+  merged.cachedPriceAmountCents ??=
+    nestedLot.cachedPriceAmountCents ?? nestedDetails.cachedPriceAmountCents;
   if (!Array.isArray(merged.images) || merged.images.length === 0) {
-    const imageUrl = item.image || nestedLot.image || nestedItem.image;
+    const imageUrl = item.image || nestedLot.image || nestedItem.image || nestedDetails.image;
     merged.images = imageUrl ? [{ url: imageUrl }] : [];
   }
   return merged;
+}
+
+export function feeCentsForBid(table, bidCents) {
+  if (!Array.isArray(table) || bidCents == null) return 0;
+  const bid = Number(bidCents);
+  if (!Number.isFinite(bid)) return 0;
+  const row = table.find((entry) => {
+    const from = Number(entry?.fromValueCents);
+    const to = Number(entry?.toValueCents);
+    return Number.isFinite(from) && Number.isFinite(to) && bid >= from && bid <= to;
+  });
+  const fee = Number(row?.feeCents);
+  return Number.isFinite(fee) ? fee : 0;
+}
+
+export function buyerComissaoPct(item) {
+  const listing = item?.listing && typeof item.listing === "object" ? item.listing : {};
+  const raw = listing.buyerComissionPercent ?? item?.buyerFeePercentage;
+  const value = Number(raw);
+  return Number.isFinite(value) ? value : 0;
+}
+
+function bidCost(bidCents, pct, table) {
+  if (bidCents == null || bidCents === "") return null;
+  const bid = Number(bidCents);
+  if (!Number.isFinite(bid)) return null;
+  const despesasCents = feeCentsForBid(table, bid);
+  const comissaoCents = Math.round(bid * pct);
+  return {
+    despesasCents,
+    comissaoCents,
+    allInCents: bid + despesasCents + comissaoCents,
+  };
 }
 
 export function compactLot(raw) {
@@ -93,14 +128,37 @@ export function compactLotDetails(raw) {
         .filter(Boolean)
         .slice(0, 3)
     : [];
+  const incrementCents = setting.minimumIncrementCents ?? null;
+  const pct = buyerComissaoPct(item);
+  const current = bidCost(item.cachedPriceAmountCents, pct, item.feeStructureValues);
+  const nextBidCents =
+    current && incrementCents != null && Number.isFinite(Number(incrementCents))
+      ? Number(item.cachedPriceAmountCents) + Number(incrementCents)
+      : null;
+  const next = bidCost(nextBidCents, pct, item.feeStructureValues);
   return {
     ...base,
     description,
     pickupAddress: item.pickUpAddress ?? null,
-    incrementCents: setting.minimumIncrementCents ?? null,
-    increment: formatReais(setting.minimumIncrementCents),
+    incrementCents,
+    increment: formatReais(incrementCents),
     images,
     phase: setting.listingPhase?.phaseName ?? null,
     views: item.views ?? null,
+    comissaoPct: pct,
+    despesasCents: current?.despesasCents ?? null,
+    despesas: formatReais(current?.despesasCents),
+    comissaoCents: current?.comissaoCents ?? null,
+    comissao: formatReais(current?.comissaoCents),
+    allInCents: current?.allInCents ?? null,
+    allIn: formatReais(current?.allInCents),
+    nextBidCents,
+    nextBid: formatReais(nextBidCents),
+    nextDespesasCents: next?.despesasCents ?? null,
+    nextDespesas: formatReais(next?.despesasCents),
+    nextComissaoCents: next?.comissaoCents ?? null,
+    nextComissao: formatReais(next?.comissaoCents),
+    nextAllInCents: next?.allInCents ?? null,
+    nextAllIn: formatReais(next?.allInCents),
   };
 }
